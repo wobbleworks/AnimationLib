@@ -1,0 +1,85 @@
+name: Build & Self-Test
+
+# Build AnimationLib and run its self-test suite on every push and pull request, with strict debug
+# heap monitoring compiled in where the toolchain supports it: AddressSanitizer catches illegal
+# accesses (heap/stack corruption, use-after-free), and on Linux its LeakSanitizer catches leaks at
+# exit; UndefinedBehaviorSanitizer (made fatal with -fno-sanitize-recover) catches overflow,
+# misalignment, and null dereference. Any violation aborts the runner with a non-zero exit, failing
+# the job. The self-tests run verbosely (ctest -V) so every module's pass/fail line — and any
+# sanitizer report — is printed in the log.
+#
+# AnimationLib is header-only and portable, so every module self-tests on every leg. MSVC takes no
+# -fsanitize flags, so the Windows leg builds and tests unsanitized — and deliberately passes no
+# CMAKE_CXX_FLAGS at all, because setting that variable REPLACES MSVC's defaults rather than
+# appending, silently dropping /EHsc and breaking the exception unwinding the self-test registry
+# relies on. The sanitizer flags therefore ride inside each sanitized leg's cmake_args instead of a
+# flags variable every leg passes.
+#
+# The library itself is pure standard C++23 with no first-party dependencies; only the self-test
+# runner reaches CoreLib, to register its tests through CoreLib's header-only self-test registry.
+# CoreLib (https://github.com/wobbleworks/CoreLib) is therefore checked out alongside AnimationLib;
+# CMake finds it at ../CoreLib/include by default.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & self-test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Report every platform's result rather than cancelling the rest on the first failure.
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (ASan+UBSan)
+            os: macos-15
+            cmake_args: >-
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          - name: Linux GCC (ASan+LSan+UBSan)
+            os: ubuntu-latest
+            cmake_args: >-
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+            asan_options: detect_leaks=1
+          - name: Linux Clang (ASan+LSan+UBSan)
+            os: ubuntu-latest
+            cmake_args: >-
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+            asan_options: detect_leaks=1
+          - name: Windows MSVC
+            os: windows-latest
+
+    steps:
+      - name: Check out AnimationLib
+        uses: actions/checkout@v5
+        with:
+          path: AnimationLib
+
+      - name: Check out CoreLib (self-test registry dependency)
+        uses: actions/checkout@v5
+        with:
+          repository: wobbleworks/CoreLib
+          path: CoreLib
+
+      # CoreLib is found through AnimationLib's CMakeLists test target (../CoreLib/include relative
+      # to the AnimationLib source dir), which resolves to the sibling checkout above on every runner.
+      - name: Configure (CMake, Debug, sanitized where supported)
+        run: cmake -S AnimationLib -B build -DCMAKE_BUILD_TYPE=Debug ${{ matrix.cmake_args }}
+
+      # --config is required for multi-config generators (Visual Studio) and ignored by single-config ones.
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      # Run verbosely (-V) so every module's pass/fail line and any sanitizer report appears in the log.
+      # detect_leaks=1 turns on LeakSanitizer on the Linux legs (a no-op elsewhere); a failing module or
+      # any sanitizer violation returns a non-zero exit and fails the job.
+      - name: Self-test (CTest, verbose)
+        run: ctest --test-dir build --build-config Debug -V
+        env:
+          ASAN_OPTIONS: ${{ matrix.asan_options }}
