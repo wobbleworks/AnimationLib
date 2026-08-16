@@ -23,6 +23,20 @@ endif()
 # directories below reference through their install-tree generator expression.
 include(GNUInstallDirs)
 
+#----------------------------------------
+# Primary build
+#
+# True when this library owns its install rules and test targets: either it is the top-level
+# project, or the repo-root superbuild has declared it a deliberate member of a multi-library
+# build rather than somebody's private subdirectory. A sibling that pulls this library in with
+# add_subdirectory gets neither, which is what keeps its headers out of the wrong install prefix.
+#----------------------------------------
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR WW_SUPERBUILD)
+	set(ANIMATIONLIB_PRIMARY_BUILD ON)
+else()
+	set(ANIMATIONLIB_PRIMARY_BUILD OFF)
+endif()
+
 add_library(AnimationLib)
 
 #----------------------------------------
@@ -93,7 +107,7 @@ target_include_directories(AnimationLib_SelfTest INTERFACE "${CORELIB_INCLUDE_DI
 # commands produce .../include/AnimationLib/*.h"). Matches the top-level guard on the test
 # target below.
 #----------------------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(ANIMATIONLIB_PRIMARY_BUILD)
 	include(CMakePackageConfigHelpers)
 
 	set(ANIMATIONLIB_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/AnimationLib")
@@ -149,7 +163,7 @@ endif()
 # so the registry (CoreLib/SelfTestRegistry.h) is active. The tests drive groups with synthetic
 # times, so they run identically on every platform.
 #----------------------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(ANIMATIONLIB_PRIMARY_BUILD)
 	set(ANIMATIONLIB_IS_TOP_LEVEL ON)
 else()
 	set(ANIMATIONLIB_IS_TOP_LEVEL OFF)
