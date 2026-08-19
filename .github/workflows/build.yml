@@ -20,9 +20,14 @@ name: Build & Self-Test
 # CoreLib (https://github.com/wobbleworks/CoreLib) is therefore checked out alongside AnimationLib;
 # CMake finds it at ../CoreLib/include by default.
 on:
+  # Branch pushes only. A tag push is handled by release.yml, which calls this workflow as a
+  # reusable job (workflow_call below) so a release is gated on this same matrix rather than
+  # running it a second time alongside.
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build-and-test:

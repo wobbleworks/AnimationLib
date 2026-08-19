@@ -91,6 +91,34 @@ group->addAnimator(0.5, fadeIn)
 To **use** the library, put `include/` on your header search path and include what
 you need — it is pure standard C++23, so nothing else is required.
 
+Through CMake there are three routes, any one of which provides the same
+namespaced target, `AnimationLib::AnimationLib`.
+
+Fetched at configure time — pin a tag, never a branch:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(AnimationLib
+	GIT_REPOSITORY https://github.com/wobbleworks/AnimationLib.git
+	GIT_TAG        v1.0.0)
+FetchContent_MakeAvailable(AnimationLib)
+target_link_libraries(your_target PRIVATE AnimationLib::AnimationLib)
+```
+
+From a checkout or submodule you already manage:
+
+```cmake
+add_subdirectory(AnimationLib)
+target_link_libraries(your_target PRIVATE AnimationLib::AnimationLib)
+```
+
+Or from an installed package, after `cmake --install`:
+
+```cmake
+find_package(AnimationLib 1.0 CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE AnimationLib::AnimationLib)
+```
+
 It builds with CMake as a static archive (one empty anchor TU) so it packages like
 the other wobbleworks libraries. The **self-tests** are the only part that reaches
 outside the standard library: they live inline in each module header (asserting
@@ -109,6 +137,20 @@ The self-tests drive groups with synthetic times (no wall clock), so they behave
 identically on every platform, and CI runs them under AddressSanitizer +
 UndefinedBehaviorSanitizer (with LeakSanitizer on Linux) to guard the memory and
 lifetime contracts.
+
+## Releases and versioning
+
+Releases are git tags of the form `v1.0.0`; [CHANGELOG.md](CHANGELOG.md)
+records what each one contains. Source is the only distribution — which for a
+header-only library is nearly all there is to ship, since the archive it builds
+is an anchor around one empty translation unit.
+
+Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): the
+major component changes when the public API breaks, the minor when it grows
+compatibly, the patch for compatible fixes. AnimationLib is versioned
+independently of anything that consumes it, so `find_package(AnimationLib 1.0)`
+accepting any 1.x is a compatibility promise rather than an accident of release
+timing.
 
 ## License
 
