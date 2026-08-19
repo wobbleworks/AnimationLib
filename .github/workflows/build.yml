@@ -59,6 +59,21 @@ jobs:
             asan_options: detect_leaks=1
           - name: Windows MSVC
             os: windows-latest
+          # Android arm64 cross-compiles the library and its self-test runner without running them:
+          # arm64 binaries need an emulator, and the available images are x86_64, which would test a
+          # different target than the one built. Unsanitized for the same reason — ASan, LSan and
+          # UBSan are runtime instrumentation, so they buy nothing on a leg that never executes.
+          #
+          # The library target is one empty anchor TU, so this leg deliberately builds the self-test
+          # runner rather than passing BUILD_TESTING=OFF; a library-only cross-build would compile
+          # nothing and prove nothing. Building the runner instantiates every module header for arm64.
+          - name: Android (arm64)
+            os: ubuntu-latest
+            build_only: true
+            cmake_args: >-
+              -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake
+              -DANDROID_ABI=arm64-v8a
+              -DANDROID_PLATFORM=android-24
 
     steps:
       - name: Check out AnimationLib
@@ -85,6 +100,7 @@ jobs:
       # detect_leaks=1 turns on LeakSanitizer on the Linux legs (a no-op elsewhere); a failing module or
       # any sanitizer violation returns a non-zero exit and fails the job.
       - name: Self-test (CTest, verbose)
+        if: ${{ !matrix.build_only }}
         run: ctest --test-dir build --build-config Debug -V
         env:
           ASAN_OPTIONS: ${{ matrix.asan_options }}
